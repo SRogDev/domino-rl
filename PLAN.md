@@ -251,6 +251,23 @@ Next.js + un endpoint Python que carga `final.zip` y responde jugadas.
 Nada de GPU en servidor: la red es tan pequeña que infiere en milisegundos en
 CPU. (Si quieres, esto puede ser tu proyecto #N del laboratorio.)
 
+## Fase 10 — Pareja de IAs vs pareja de humanos (la prueba de fuego) ⭐
+
+**Objetivo:** dos copias del mismo modelo (una por silla, cada una viendo
+*solo* su mano) juegan como pareja contra dos humanos.
+
+- Es el experimento que valida todo el proyecto: si la coordinación ciega
+  emergió de verdad en el entrenamiento, la pareja de IAs debe coordinarse
+  sin hablarse — igual que hacía contra sí misma.
+- Implementación: cargar `final.zip` dos veces; cada copia recibe solo la
+  observación de su silla (los mismos 143 números desde su perspectiva).
+  Es ~30 líneas: un `PPOAgent(round, seat)` que envuelve `model.predict`.
+  (En entrenamiento ya hacemos esto mismo con 4 sillas.)
+- Interfaz: extender la web de la Fase 9 a 4 sillas (2 humanas + 2 IA), o un
+  bot de WhatsApp por turnos.
+- Métrica: win-rate de la pareja IA vs parejas humanas en N manos, más la
+  pregunta cualitativa: *"¿sentiste que las dos IAs se coordinaban?"*.
+
 ---
 
 ## Decisiones de diseño ya tomadas (y por qué)

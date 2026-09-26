@@ -1,7 +1,7 @@
 """Train the domino agent with self-play PPO (masked actions).
 
 Phase 5 of the plan. Everything runs on CPU: the network is tiny
-(98 -> 128 -> 128 -> 111) and the simulator is pure Python, so the free
+(143 -> 128 -> 128 -> 111) and the simulator is pure Python, so the free
 Colab tier (or even a laptop) is enough.
 
 Usage (local):
@@ -29,6 +29,7 @@ def make_vec_env(mode: str, reward_mode: str, shaping_coef: float,
                  seed: int, n_envs: int, n_players: int):
     """DummyVecEnv of masked domino envs (single process, no pickling pain)."""
     from sb3_contrib.common.wrappers import ActionMasker
+    from stable_baselines3.common.monitor import Monitor
     from stable_baselines3.common.vec_env import DummyVecEnv
 
     from .env import DominoEnv
@@ -38,6 +39,7 @@ def make_vec_env(mode: str, reward_mode: str, shaping_coef: float,
             env = DominoEnv(mode=mode, reward_mode=reward_mode,
                             shaping_coef=shaping_coef, n_players=n_players,
                             seed=seed + rank)
+            env = Monitor(env)  # episode stats -> ep_rew_mean in logs
             return ActionMasker(env, lambda e: e.action_masks())
         return _init
 
@@ -71,6 +73,7 @@ def main():
 
     from sb3_contrib import MaskablePPO
     from stable_baselines3.common.callbacks import CheckpointCallback
+    from stable_baselines3.common.monitor import Monitor
 
     os.makedirs(args.out, exist_ok=True)
     vec_env = make_vec_env(args.mode, args.reward_mode, args.shaping_coef,
@@ -93,8 +96,10 @@ def main():
             seed=args.seed,
             verbose=1,
         )
-    ckpt = CheckpointCallback(save_freq=args.ckpt_every, save_path=args.out,
-                              name_prefix="ckpt")
+    # CheckpointCallback counts VecEnv steps (1 call = n_envs timesteps)
+    ckpt = CheckpointCallback(
+        save_freq=max(1, args.ckpt_every // args.n_envs),
+        save_path=args.out, name_prefix="ckpt")
     model.learn(total_timesteps=args.timesteps, callback=ckpt)
     path = os.path.join(args.out, "final")
     model.save(path)

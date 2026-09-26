@@ -112,3 +112,12 @@ def test_save_load_roundtrip(tmp_path):
     q = load_policy(path)
     for a, b in zip(p.parameters(), q.parameters()):
         assert torch.equal(a, b)
+
+
+def test_eval_vs_returns_sane_rates():
+    from domino_rl.mappo import eval_vs
+    p = _policy()
+    wr, dr = eval_vs(p, "random", manos=20, mode="individual",
+                     n_players=2, seed=0)
+    assert 0.0 <= wr <= 1.0 and 0.0 <= dr <= 1.0
+    assert wr + dr <= 1.0

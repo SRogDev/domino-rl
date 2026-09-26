@@ -55,6 +55,9 @@ class ActorCritic(nn.Module):
         self.trunk = nn.Sequential(*layers)
         self.actor = nn.Linear(d, n_actions)
         self.critic = nn.Linear(d, 1)
+        # small actor init -> near-uniform policy at start -> real exploration
+        nn.init.normal_(self.actor.weight, std=0.01)
+        nn.init.zeros_(self.actor.bias)
 
     def forward(self, obs: torch.Tensor, mask: torch.Tensor):
         h = self.trunk(obs)
@@ -189,9 +192,9 @@ def compute_gae(rew: np.ndarray, val: np.ndarray,
 
 def ppo_update(policy: ActorCritic, opt: torch.optim.Optimizer,
                batch: dict[str, torch.Tensor],
-               epochs: int = 4, minibatch: int = 512,
+               epochs: int = 2, minibatch: int = 512,
                clip: float = 0.2, vf_coef: float = 0.5,
-               ent_coef: float = 0.01, max_grad_norm: float = 0.5,
+               ent_coef: float = 0.1, max_grad_norm: float = 0.5,
                device: str = "cpu"):
     adv = batch["adv"]
     adv = (adv - adv.mean()) / (adv.std() + 1e-8)
@@ -245,12 +248,54 @@ def _stack(trajs: list[dict], device: str):
     }
 
 
+# ------------------------------------------------------------------ eval hook
+
+def eval_vs(policy: ActorCritic, baseline: str, manos: int, mode: str,
+            n_players: int, seed: int, device: str = "cpu"):
+    """Win-rate of `policy` (deterministic) vs a baseline. The honest metric."""
+    from .baselines import AGENTS
+    base = AGENTS[baseline]()
+    rng = np.random.default_rng(seed)
+    wins = losses = draws = 0
+    policy.eval()
+    for i in range(manos):
+        seats_mine = ((0,) if n_players == 2 else (0, 2)) if i % 2 == 0 else \
+                     ((1,) if n_players == 2 else (1, 3))
+        env = DominoEnv(mode=mode, n_players=n_players,
+                        seed=int(rng.integers(0, 2 ** 31 - 1)))
+        env.reset()
+        done = False
+        while not done:
+            seat = env.round.turn
+            if seat in seats_mine:
+                ot = torch.as_tensor(env.observe(seat), dtype=torch.float32,
+                                     device=device).unsqueeze(0)
+                mt = torch.as_tensor(env.action_masks(), dtype=torch.bool,
+                                     device=device).unsqueeze(0)
+                a, _, _ = policy.act(ot, mt, deterministic=True)
+                action = int(a.item())
+            else:
+                action = int(base.act(env.observe(seat), env.action_masks()))
+            _, _, term, trunc, info = env.step(action)
+            done = bool(term or trunc)
+        wt = info["winner_team"]
+        if wt is None:
+            draws += 1
+        elif wt in {env.round.team_of(s) for s in seats_mine}:
+            wins += 1
+        else:
+            losses += 1
+    return wins / manos, draws / manos
+
+
 # ------------------------------------------------------------------ training
 
 def train(n_iters: int = 300, manos_per_iter: int = 64, mode: str = "teams",
           n_players: int = 4, match_target: int = 100, seed: int = 0,
-          lr: float = 3e-4, out: str = "checkpoints/mappo",
+          lr: float = 3e-4, ent_coef: float = 0.1, epochs: int = 2,
+          out: str = "checkpoints/mappo",
           ckpt_every: int = 50, log_every: int = 10,
+          eval_every: int = 0, eval_manos: int = 200,
           device: str = "cpu", resume: str | None = None):
     policy = ActorCritic().to(device)
     if resume and os.path.exists(resume):
@@ -264,15 +309,24 @@ def train(n_iters: int = 300, manos_per_iter: int = 64, mode: str = "teams",
         trajs, stats = play_manos(policy, manos_per_iter, mode, n_players,
                                   match_target, rng, device)
         batch = _stack(trajs, device)
-        losses = ppo_update(policy, opt, batch, device=device)
+        losses = ppo_update(policy, opt, batch, ent_coef=ent_coef,
+                            epochs=epochs, device=device)
         mean_rew = float(np.mean([t["rew"].sum() for t in trajs]))
         if it % log_every == 0 or it == 1:
-            print(f"iter {it:4d}/{n_iters}  manos={stats['manos']}  "
-                  f"mean_seat_rew={mean_rew:+.3f}  "
-                  f"hands_won={stats['team_hands_won']}  "
-                  f"avg_tantos={stats['avg_tantos_per_mano']:.1f}  "
-                  f"pg={losses['pg']:+.4f} vf={losses['vf']:.4f} "
-                  f"ent={losses['ent']:.3f}", flush=True)
+            line = (f"iter {it:4d}/{n_iters}  manos={stats['manos']}  "
+                    f"mean_seat_rew={mean_rew:+.3f}  "
+                    f"hands_won={stats['team_hands_won']}  "
+                    f"avg_tantos={stats['avg_tantos_per_mano']:.1f}  "
+                    f"pg={losses['pg']:+.4f} vf={losses['vf']:.4f} "
+                    f"ent={losses['ent']:.3f}")
+            if eval_every and it % eval_every == 0:
+                wr, dr = eval_vs(policy, "random", eval_manos, mode,
+                                 n_players, seed + it, device)
+                wg, dg = eval_vs(policy, "greedy", eval_manos, mode,
+                                 n_players, seed + it + 999, device)
+                line += (f"  | EVAL vs random {wr:.1%} (draw {dr:.1%})"
+                         f" vs greedy {wg:.1%} (draw {dg:.1%})")
+            print(line, flush=True)
         if it % ckpt_every == 0:
             save_policy(policy, os.path.join(out, f"ckpt_{it}.pt"))
     final = os.path.join(out, "final.pt")
@@ -291,14 +345,23 @@ def main():
     ap.add_argument("--match-target", type=int, default=100)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--lr", type=float, default=3e-4)
+    ap.add_argument("--ent-coef", type=float, default=0.1)
+    ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--out", default="checkpoints/mappo")
     ap.add_argument("--resume", default=None)
     ap.add_argument("--ckpt-every", type=int, default=50)
+    ap.add_argument("--log-every", type=int, default=10)
+    ap.add_argument("--eval-every", type=int, default=0,
+                    help="run eval vs random/greedy every N iters (0=off)")
+    ap.add_argument("--eval-manos", type=int, default=200)
     args = ap.parse_args()
     train(n_iters=args.iters, manos_per_iter=args.manos_per_iter,
           mode=args.mode, n_players=args.n_players,
           match_target=args.match_target, seed=args.seed, lr=args.lr,
-          out=args.out, resume=args.resume, ckpt_every=args.ckpt_every)
+          ent_coef=args.ent_coef, epochs=args.epochs, out=args.out,
+          resume=args.resume, ckpt_every=args.ckpt_every,
+          log_every=args.log_every, eval_every=args.eval_every,
+          eval_manos=args.eval_manos)
 
 
 if __name__ == "__main__":

@@ -33,8 +33,10 @@ def load_policy(spec: str):
     raise ValueError(f"unknown policy spec {spec!r}")
 
 
-def play_round(policy_a, policy_b, seats_a=(0, 2), mode="teams", seed=None):
-    env = DominoEnv(mode=mode, reward_mode="sparse", seed=seed)
+def play_round(policy_a, policy_b, seats_a=(0, 2), mode="teams",
+               n_players=4, seed=None):
+    env = DominoEnv(mode=mode, reward_mode="sparse", n_players=n_players,
+                    seed=seed)
     obs, _ = env.reset()
     done = False
     while not done:
@@ -46,23 +48,28 @@ def play_round(policy_a, policy_b, seats_a=(0, 2), mode="teams", seed=None):
     return info
 
 
-def tournament(policy_a, policy_b, n_rounds=200, mode="teams", seed=0):
+def tournament(policy_a, policy_b, n_rounds=200, mode="teams",
+               n_players=4, seed=0):
     rng = np.random.default_rng(seed)
     wins = Counter()   # "A" / "B" / "draw"
     points = Counter()
     kinds = Counter()  # domino vs tranca
     for i in range(n_rounds):
         # alternate which seats each policy controls (fairness)
-        seats_a = (0, 2) if i % 2 == 0 else (1, 3)
+        if n_players == 2:
+            seats_a = (0,) if i % 2 == 0 else (1,)
+        else:
+            seats_a = (0, 2) if i % 2 == 0 else (1, 3)
         info = play_round(policy_a, policy_b, seats_a,
-                          mode=mode, seed=int(rng.integers(0, 2**31 - 1)))
+                          mode=mode, n_players=n_players,
+                          seed=int(rng.integers(0, 2**31 - 1)))
         w = info["winner_team"]
         if w is None:
             wins["draw"] += 1
         else:
-            # winner_team is 0/1 (team index); map to A/B via seats_a
-            a_teams = {0} if seats_a == (0, 2) else {1}
-            side = "A" if w in a_teams else "B"
+            # winner_team is a team index (teams) or seat (individual);
+            # seats_a tells which side policy A controlled
+            side = "A" if w in seats_a else "B"
             wins[side] += 1
             points[side] += info["points"]
         kinds["domino" if info["winner_seat"] is not None else "tranca"] += 1
@@ -76,10 +83,12 @@ def main():
     ap.add_argument("--b", default="random")
     ap.add_argument("--rounds", type=int, default=200)
     ap.add_argument("--mode", default="teams", choices=["teams", "individual"])
+    ap.add_argument("--n-players", type=int, default=4, choices=[2, 4])
     args = ap.parse_args()
 
     pa, pb = load_policy(args.a), load_policy(args.b)
-    res = tournament(pa, pb, n_rounds=args.rounds, mode=args.mode)
+    res = tournament(pa, pb, n_rounds=args.rounds, mode=args.mode,
+                     n_players=args.n_players)
     w = res["wins"]
     a, b = w.get("A", 0), w.get("B", 0)
     print(f"A ({args.a}) vs B ({args.b}) — {res['rounds']} rounds [{args.mode}]")

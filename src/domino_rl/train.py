@@ -63,27 +63,39 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default="checkpoints")
     ap.add_argument("--net", type=int, nargs=2, default=[128, 128])
+    ap.add_argument("--resume", action="store_true",
+                    help="continue training from --out/final.zip if it exists")
+    ap.add_argument("--ckpt-every", type=int, default=250_000,
+                    help="save a checkpoint every N timesteps (Colab safety)")
     args = ap.parse_args()
 
     from sb3_contrib import MaskablePPO
+    from stable_baselines3.common.callbacks import CheckpointCallback
 
     os.makedirs(args.out, exist_ok=True)
     vec_env = make_vec_env(args.mode, args.reward_mode, args.shaping_coef,
                            args.seed, args.n_envs, args.n_players)
 
-    model = MaskablePPO(
-        "MlpPolicy",
-        vec_env,
-        policy_kwargs=dict(net_arch=list(args.net)),
-        n_steps=1024,
-        batch_size=512,
-        n_epochs=4,
-        gamma=0.995,          # rounds are short; value the actual outcome
-        learning_rate=3e-4,
-        seed=args.seed,
-        verbose=1,
-    )
-    model.learn(total_timesteps=args.timesteps)
+    final_path = os.path.join(args.out, "final.zip")
+    if args.resume and os.path.exists(final_path):
+        print("resuming from", final_path)
+        model = MaskablePPO.load(final_path, env=vec_env)
+    else:
+        model = MaskablePPO(
+            "MlpPolicy",
+            vec_env,
+            policy_kwargs=dict(net_arch=list(args.net)),
+            n_steps=1024,
+            batch_size=512,
+            n_epochs=4,
+            gamma=0.995,          # rounds are short; value the actual outcome
+            learning_rate=3e-4,
+            seed=args.seed,
+            verbose=1,
+        )
+    ckpt = CheckpointCallback(save_freq=args.ckpt_every, save_path=args.out,
+                              name_prefix="ckpt")
+    model.learn(total_timesteps=args.timesteps, callback=ckpt)
     path = os.path.join(args.out, "final")
     model.save(path)
     print("saved:", path + ".zip")

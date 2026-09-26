@@ -1,0 +1,29 @@
+[project]
+name = "domino-rl"
+version = "0.1.0"
+description = "Teach an AI to play Cuban double-9 domino with reinforcement learning"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "gymnasium",
+]
+
+[project.optional-dependencies]
+train = [
+    "stable-baselines3",
+    "sb3-contrib",   # MaskablePPO
+]
+dev = [
+    "pytest",
+]
+
+[project.scripts]
+domino-evaluate = "domino_rl.evaluate:main"
+domino-train = "domino_rl.train:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

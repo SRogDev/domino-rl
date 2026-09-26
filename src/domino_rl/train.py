@@ -26,7 +26,7 @@ import numpy as np
 
 
 def make_vec_env(mode: str, reward_mode: str, shaping_coef: float,
-                 seed: int, n_envs: int):
+                 seed: int, n_envs: int, n_players: int):
     """DummyVecEnv of masked domino envs (single process, no pickling pain)."""
     from sb3_contrib.common.wrappers import ActionMasker
     from stable_baselines3.common.vec_env import DummyVecEnv
@@ -36,7 +36,8 @@ def make_vec_env(mode: str, reward_mode: str, shaping_coef: float,
     def _thunk(rank: int):
         def _init():
             env = DominoEnv(mode=mode, reward_mode=reward_mode,
-                            shaping_coef=shaping_coef, seed=seed + rank)
+                            shaping_coef=shaping_coef, n_players=n_players,
+                            seed=seed + rank)
             return ActionMasker(env, lambda e: e.action_masks())
         return _init
 
@@ -52,7 +53,12 @@ def main():
     ap.add_argument("--timesteps", type=int, default=2_000_000)
     ap.add_argument("--n-envs", type=int, default=8)
     ap.add_argument("--mode", default="teams", choices=["teams", "individual"])
-    ap.add_argument("--reward-mode", default="shaped", choices=["sparse", "shaped"])
+    ap.add_argument("--n-players", type=int, default=4, choices=[2, 4],
+                    help="2 = curriculum step 1 (1v1, hidden info); "
+                         "4 = full game")
+    ap.add_argument("--reward-mode", default="sparse", choices=["sparse", "shaped"],
+                    help="sparse = pure win/loss (bitter lesson default); "
+                         "shaped = experimental dense nudge")
     ap.add_argument("--shaping-coef", type=float, default=0.1)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default="checkpoints")
@@ -63,7 +69,7 @@ def main():
 
     os.makedirs(args.out, exist_ok=True)
     vec_env = make_vec_env(args.mode, args.reward_mode, args.shaping_coef,
-                           args.seed, args.n_envs)
+                           args.seed, args.n_envs, args.n_players)
 
     model = MaskablePPO(
         "MlpPolicy",

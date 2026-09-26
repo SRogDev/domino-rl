@@ -1,14 +1,32 @@
 # Plan: de cero a una IA campeona de dominó cubano 🁫
 
 Meta: aprender Reinforcement Learning construyendo un agente que juegue
-**dominó cubano de 9** (doble-9, 55 fichas, parejas) a gran nivel.
+**dominó cubano de 9** (doble-9, 55 fichas, parejas 2v2) a gran nivel.
 Restricción: **sin GPU potente** — solo CPU y las ~30h gratis de Colab.
 
 Buenas noticias primero: **no necesitas GPU para esto.** La red que vamos a
-entrenar es diminuta (98 → 128 → 128 → 111 neuronas) y el simulador es Python
-puro y rapidísimo. El cuello de botella en RL de juegos no es el hardware,
-es el diseño: cómo representas el estado, cómo defines la recompensa y contra
-quién entrena el agente. Todo eso corre perfecto en CPU.
+entrenar es diminuta (143 → 128 → 128 → 111 neuronas) y el simulador es
+Python puro y rapidísimo. El cuello de botella en RL de juegos no es el
+hardware, es el diseño: cómo representas el estado, cómo defines la
+recompensa y contra quién entrena el agente. Todo eso corre perfecto en CPU.
+
+## Principios (no negociables)
+
+1. **Bitter lesson estricta.** Cero heurísticas humanas inyectadas en el
+   aprendizaje: ni reglas de "juega el doble", ni conteo de fichas
+   programado, ni recompensas que premien "buenas jugadas" según un humano.
+   La única señal es ganar o perder (+1/−1). Todo lo demás — contar fichas,
+   inferir manos ocultas, coordinarse con el compañero sin hablarle — debe
+   **emerger** del self-play o no existe.
+2. **Doble propósito.** (a) Un agente que juegue a gran nivel. (b) Usar el
+   agente entrenado como **herramienta de descubrimiento**: extraer las
+   heurísticas que infirió solo y devolvérselas a los humanos en forma
+   legible (Fase 7). RL como microscopio estadístico, no solo como
+   marcador.
+3. **El juego es un Dec-POMDP**, no un MDP: 4 agentes, información parcial
+   (cada uno ve solo su mano), recompensa de equipo, y coordinación con el
+   compañero **sin canal de comunicación** — cualquier "señal" debe emerger
+   de las jugadas mismas (misma familia que el bidding en Bridge o Hanabi).
 
 ## El mapa mental (RL para quien viene de supervised learning)
 
@@ -86,22 +104,25 @@ muestra que el dominó no se gana solo "botando lo alto").
 
 **Objetivo:** entender *qué ve* el agente y *qué puede hacer*.
 
-- **Observación** (`env.py::observe`): vector de 98 números — mi mano (55),
-  puntas de la mesa (20), pips ya jugados (10), fichas restantes por jugador
-  (4), pases seguidos (1), quién soy y quién es mi pareja (8). Todo
-  normalizado a [0,1]. Pregunta clave de RL: ¿qué información necesita el
-  agente para decidir bien? (Ej: saber qué pips ya salieron permite "contar".)
+- **Observación** (`env.py::observe`): vector de 143 números — mi mano (55),
+  puntas de la mesa (20), **historial público de fichas jugadas** (55),
+  fichas restantes por jugador (4), pases seguidos (1), quién soy y quién es
+  mi pareja (8). Todo normalizado a [0,1]. La tesis: el sistema es cerrado y
+  contable (55 fichas, se sabe cuántas salieron), así que el conteo de fichas
+  y la inferencia de manos ocultas deben **emerger solos** del historial —
+  sin una línea de código que cuente.
 - **Acciones** (111): 55 fichas × 2 puntas + pasar. Con **máscara de acciones
   legales**: la red nunca elige una jugada ilegal (truco estándar que acelera
   muchísimo el aprendizaje).
-- **Recompensa**: `sparse` (+1/−1/0 al final) o `shaped` (más un empujoncito
-  denso por dejar menos pips que el contrario). Empieza con `shaped`.
+- **Recompensa**: `sparse` (+1/−1/0 al final, **default — bitter lesson**) o
+  `shaped` (experimental: empujoncito denso por dejar menos pips; solo para
+  medir si acelera sin corromper).
 
 **Qué aprender aquí:** el 80% del éxito en RL aplicado está en estos tres
 diseños, no en el algoritmo. Si el agente no aprende, casi siempre el problema
 está aquí.
 
-**Listo cuando:** puedas explicar por qué cada bloque de 98 números está ahí.
+**Listo cuando:** puedas explicar por qué cada bloque de 143 números está ahí.
 
 ## Fase 4 — Primer agente: Q-learning tabular (2–3 días) ⭐ tu "hola mundo"
 
@@ -124,20 +145,39 @@ manejables con una tabla + exploración ε-greedy).
 
 ## Fase 5 — Deep RL + self-play: el entrenamiento de verdad (1–2 semanas)
 
-**Objetivo:** PPO con red neuronal jugando contra sí mismo en doble-9.
+**Inspiración**: [DominAI](https://github.com/igorbispo99/dominai) (doble-6,
+DQN self-play, modo parejas, máscara de acciones, *opponent mix*) y
+[DouZero](https://github.com/kwai/DouZero) (ICML 2021: juego de "shedding" con
+colaboración + información incompleta + acciones masivas, resuelto con self-play
+deep RL — la prueba de que esta familia de técnicas funciona para nuestra clase
+de problema).
+
+**Objetivo:** PPO con red neuronal jugando contra sí mismo en doble-9,
+**camino progresivo** (pipeline simple primero, objetivo real después):
+
+1. **1v1 con 2 jugadores** (`--n-players 2 --mode individual`): el problema
+   más simple con información oculta real. Solo valida que el pipeline
+   aprende (win-rate vs random > 60%).
+2. **4 jugadores individual** (`--mode individual`): todos contra todos.
+   Valida que el aprendizaje escala a 4 manos ocultas.
+3. **2v2 parejas** (`--mode teams`, el objetivo real): coordinación ciega
+   con el compañero. Aquí es donde debe emerger la "comunicación" por
+   jugadas.
 
 Ya tienes el script: `src/domino_rl/train.py` (usa `MaskablePPO` de
 sb3-contrib). El truco clave ya está implementado: **self-play con política
-compartida** — el entorno sienta al mismo agente en las 4 sillas y cada
-recompensa se calcula desde la perspectiva del equipo que actúa. Así un PPO
-monojugador entrena un juego de 4.
+compartida** — el entorno sienta al mismo agente en las sillas que toquen y
+cada recompensa se calcula desde la perspectiva del equipo que actúa.
+Mezcla de oponentes (checkpoints viejos + bots) cuando el self-play puro se
+estanque.
 
 ```bash
 # En Colab (gratis, CPU): clona el repo, pip install -e ".[train]" y:
-python -m domino_rl.train --timesteps 2000000 --n-envs 4 --out /content/drive/MyDrive/domino-rl
+python -m domino_rl.train --n-players 2 --mode individual --timesteps 1000000 --n-envs 4 --out /content/drive/MyDrive/domino-rl
 ```
 
-- 2M de pasos ≈ unas horas en CPU de Colab. Guarda checkpoints.
+- 2M de pasos ≈ unas horas en CPU de Colab. Guarda checkpoints (el free
+  tier puede desconectarse).
 - Hiperparámetros de partida ya puestos: red 128×128, `gamma=0.995`
   (las manos son cortas: lo que importa es el resultado), lr 3e-4.
 - Si la curva de win-rate vs greedy no sube en 500k pasos: revisa Fase 3
@@ -163,24 +203,47 @@ autoengañarte.
 **Qué aprender aquí:** evaluar agentes es una disciplina propia. Un solo
 número miente; los patrones de derrota enseñan.
 
-## Fase 7 — Subir de nivel (iterativo, el resto del proyecto)
+## Fase 7 — Descubrimiento de conocimiento (el segundo propósito) ⭐
+
+**Objetivo:** usar al agente entrenado como microscopio estadístico —
+extraer las heurísticas que infirió solo y devolvérselas a los humanos en
+forma legible. Si la bitter lesson funcionó, aquí aparece la recompensa.
+
+1. **Análisis de política**: muestrea millones de decisiones del agente y
+   mide patrones: ¿con qué frecuencia "se dobla" con cada doble según el
+   estado de la mesa? ¿Cuándo sacrifica puntas? ¿Cómo cambia su juego según
+   lo que ya salió (usa de verdad el historial)?
+2. **Situaciones prototípicas**: agrupa estados similares y extrae la jugada
+   típica del agente en cada uno → "en mesa X con mano Y, el agente hace Z
+   el 87% de las veces".
+3. **Ablaciones**: ¿qué pasa si le quitas el historial de la observación?
+   ¿Si le quitas la identidad de la pareja? Lo que degrade el rendimiento
+   revela qué información *realmente* usa (p. ej. "sin historial pierde 12
+   puntos de win-rate → sí aprendió a contar fichas").
+4. **Reporte legible**: escribe `docs/hallazgos.md` con las heurísticas
+   descubiertas en lenguaje de jugador de dominó, cada una con su evidencia
+   estadística. Ejemplo del formato buscado: *"Con la mesa trabada y 3+
+   fichas del palo dominante fuera, el agente evita doblarse con dobles
+   bajos (p < 0.01, n = 40k situaciones)"*.
+
+**Listo cuando:** un jugador humano puede leer `docs/hallazgos.md` y
+aprender al menos 3 ideas que no sabía.
+
+## Fase 8 — Subir de nivel (iterativo, el resto del proyecto)
 
 Ideas ordenadas por impacto esperado. Ataca la que revele la Fase 6:
 
-1. **Mejor recompensa/observación**: añade "pips que le quedan al contrario
-   por valor" o historial de jugadas de la pareja (memoria corta).
-2. **League play**: entrena contra un *pool* de versiones pasadas del agente
+1. **League play**: entrena contra un *pool* de versiones pasadas del agente
    (no solo contra sí mismo actual) → evita estrategias cíclicas.
-3. **Parejas de verdad**: hoy el agente no sabe cooperar explícitamente;
-   recompensa de equipo + observación de la pareja ya lo incentivan, pero se
-   puede modelar mejor (p. ej. entrenar con comunicación implícita vía jugadas
-   "señal").
-4. **MCTS en inferencia**: en tu turno, simula N futuros con el modelo actual
+2. **Señales a la pareja**: el agente ya ve quién es su pareja; analiza
+   (Fase 7) si emergieron jugadas "señal" y refuérzalas con currículo.
+3. **MCTS en inferencia**: en tu turno, simula N futuros con el modelo actual
    y elige la mejor jugada (estilo AlphaZero-lite, solo CPU).
-5. **Currículo**: entrena primero en `mode="individual"` (más simple, sin
-   problema de asignación de crédito en equipo) y luego transfiere a parejas.
+4. **Deep CFR**: si el self-play se estanca o quieres rigor teórico, esta es
+   la vía académica (más compleja; ojo: CFR vanilla es para 2 jugadores
+   suma-cero — el 2v2 por equipos necesita extensiones).
 
-## Fase 8 — Jugar contra ella (1 semana, la diversión)
+## Fase 9 — Jugar contra ella (1 semana, la diversión)
 
 **Objetivo:** una web mínima donde retes a tu agente.
 
@@ -194,8 +257,10 @@ CPU. (Si quieres, esto puede ser tu proyecto #N del laboratorio.)
 
 - **Episodio = una mano**, no un partido a 100: episodios cortos = más
   señal de aprendizaje por hora. Los tantos del partido se añaden después.
-- **Primero `teams` directo**: el dominó cubano es de parejas; el self-play
-  con política compartida lo maneja sin complejidad extra.
+- **Currículo progresivo**: 1v1 (2 jugadores) → 4 individual → 2v2 parejas.
+  El self-play con política compartida maneja todos sin complejidad extra.
+- **Bitter lesson**: reward `sparse` por defecto; `shaped` solo como
+  experimento controlado.
 - **Sin GPU por diseño**: si algún día quieres escalar, el mismo código corre
   en GPU sin cambios (PyTorch lo hace solo).
 - **Reglas simplificadas a propósito**: sin capicúa/bonificaciones raras.
@@ -204,7 +269,7 @@ CPU. (Si quieres, esto puede ser tu proyecto #N del laboratorio.)
 ## Glosario rápido
 
 - **Episodio**: una mano completa, del reparto al conteo de tantos.
-- **Política (π)**: la red neuronal; entra el estado (98 números), sale la
+- **Política (π)**: la red neuronal; entra el estado (143 números), sale la
   jugada.
 - **Self-play**: el agente es su propio rival en las 4 sillas.
 - **Action masking**: prohibirle a la red las jugadas ilegales.

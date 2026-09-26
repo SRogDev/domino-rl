@@ -21,7 +21,9 @@ Python puro — la capa gratuita de Colab sobra.
 ```
 src/domino_rl/
   game.py       Motor del dominó cubano doble-9 (reglas, reparto, tantos)
-  env.py        Entorno estilo Gymnasium: obs[98], 111 acciones con máscara
+  env.py        Entorno estilo Gymnasium: obs[143] (incluye historial público
+                de fichas jugadas — el conteo debe emerger, no hardcodearse),
+                111 acciones con máscara, reward sparse por defecto (bitter lesson)
   baselines.py  Agentes de referencia: random y greedy (heurístico)
   evaluate.py   Torneos entre políticas: win-rate, puntos, dominó vs tranca
   train.py      Entrenamiento PPO con self-play (CPU, sin GPU)

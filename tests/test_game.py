@@ -10,6 +10,7 @@ from domino_rl.game import (
     TILES,
     Round,
     new_round,
+    pips,
     tile_index,
 )
 
@@ -139,3 +140,44 @@ def test_teams_mode_pairs_seats():
     assert r.team_of(0) == r.team_of(2) != r.team_of(1) == r.team_of(3)
     r2 = new_round(seed=5, mode="individual")
     assert len({r2.team_of(s) for s in range(4)}) == 4
+
+
+def test_double_nine_set_totals_495_pips():
+    # Invariant of any double-N set: total pips = N(N+1)(N+2)/2.
+    # For N=9: 495 total, average 9 per tile.
+    total = sum(pips(t) for t in range(N_TILES))
+    assert total == 495
+    assert total / N_TILES == 9
+
+
+def test_two_player_round_deals_and_alternates():
+    r = new_round(seed=7, mode="individual", n_players=2)
+    assert len(r.hands) == 2
+    assert all(len(h) == 10 for h in r.hands)
+    assert len(r.pozo) == 35
+    # turn alternates between the two seats
+    s0 = r.turn
+    moves = r.legal_moves(s0)
+    r.apply(s0, moves[0] if moves else None)
+    if not r.done:
+        assert r.turn == 1 - s0
+
+
+def test_two_player_tranca_after_two_consecutive_passes():
+    r = new_round(seed=7, mode="individual", n_players=2)
+    # force empty hands so both must pass (valid mid-game state)
+    r.hands = [[], []]
+    r.salida_pending = False
+    r.ends = (3, 7)
+    r.turn = 0
+    r.apply(0, None)
+    assert not r.done
+    r.apply(1, None)
+    assert r.done  # tranca after n_players consecutive passes
+
+
+def test_teams_mode_requires_four_players():
+    with pytest.raises(ValueError):
+        new_round(seed=1, mode="teams", n_players=2)
+    with pytest.raises(ValueError):
+        new_round(seed=1, n_players=3)

@@ -27,6 +27,9 @@ src/domino_rl/
   baselines.py  Agentes de referencia: random y greedy (heurístico)
   evaluate.py   Torneos entre políticas: win-rate, puntos, dominó vs tranca
   train.py      Entrenamiento PPO con self-play (CPU, sin GPU)
+  demo/         Mesa digital: humanos (móvil) vs IA —
+                `PYTHONPATH=src python demo/server.py`, abrir
+                http://<ip>:8000 en cada teléfono
 tests/          Tests del motor (TDD: se escribieron antes que el motor)
 PLAN.md         El plan paso a paso completo (Fases 0–8)
 ```

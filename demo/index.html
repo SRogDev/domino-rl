@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Domino RL - La mesa digital</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { font-family: system-ui, sans-serif; margin: 0; background: #0d5c2e;
+         color: #fff; min-height: 100vh; display: flex; flex-direction: column; }
+  header { padding: 10px 14px; background: rgba(0,0,0,.25); }
+  header h1 { margin: 0 0 6px; font-size: 18px; }
+  .score { font-size: 15px; font-weight: bold; }
+  select, button { font-size: 15px; padding: 10px 14px; border-radius: 10px; border: none; }
+  select { background: #fff; color: #111; }
+  button { background: #ffb300; color: #222; font-weight: bold; cursor: pointer; }
+  button.ghost { background: rgba(255,255,255,.15); color: #fff; }
+  button.big { font-size: 17px; padding: 14px 20px; margin: 6px; }
+  #lobby { padding: 24px 16px; text-align: center; }
+  #lobby .controls { display: flex; flex-direction: column; gap: 10px; max-width: 340px; margin: 16px auto; }
+  #board-wrap { padding: 10px 6px; min-height: 110px; }
+  #board { display: flex; gap: 6px; overflow-x: auto; padding: 8px 4px; align-items: center; }
+  .tile { background: #fdfdf5; color: #111; border-radius: 8px; padding: 6px 4px;
+          min-width: 44px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,.4);
+          flex: 0 0 auto; }
+  .tile .pips { font-size: 17px; font-weight: bold; line-height: 1.25; }
+  .tile .div { border-top: 2px solid #111; margin: 2px 6px; }
+  #msg { padding: 8px 14px; font-size: 15px; min-height: 24px; color: #ffe9a8; }
+  #log { padding: 0 14px; font-size: 13px; color: #cfe8d4; min-height: 60px; }
+  #log div { margin: 2px 0; }
+  #seats { padding: 0 14px; font-size: 13px; color: #ffe9a8; }
+  #hand-wrap { margin-top: auto; padding: 10px; background: rgba(0,0,0,.3); }
+  #hand-label { font-size: 13px; margin-bottom: 6px; color: #ffe9a8; }
+  #hand { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 8px; }
+  #hand .tile { min-width: 56px; padding: 10px 6px; cursor: default; opacity: .55; }
+  #hand .tile.playable { opacity: 1; cursor: pointer; outline: 3px solid #ffb300; }
+  #hand .tile.selected { outline: 3px solid #29b6f6; }
+  #side-pick { display: none; gap: 8px; margin-top: 8px; }
+  #overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.75);
+             align-items: center; justify-content: center; z-index: 10; }
+  #overlay .card { background: #fff; color: #111; border-radius: 16px; padding: 24px;
+                   text-align: center; max-width: 85%; }
+  #overlay h2 { margin-top: 0; }
+  #game { display: none; flex-direction: column; min-height: 100vh; }
+</style>
+</head>
+<body>
+
+<div id="lobby">
+  <h1>🁫 Domino RL — la mesa digital</h1>
+  <p style="opacity:.85">Un teléfono por jugador. La IA ocupa las sillas vacías.<br>
+  En parejas 2v2: los dos humanos son pareja contra dos IAs.</p>
+  <div class="controls">
+    <select id="opponent">
+      <option value="greedy">IA rival: Greedy (la más fuerte hoy)</option>
+      <option value="random">IA rival: Azar</option>
+      <option value="ppo" id="ppoOpt" style="display:none">IA rival: PPO estudiante</option>
+    </select>
+    <select id="mode">
+      <option value="teams">Parejas 2v2</option>
+      <option value="individual">Todos contra todos</option>
+    </select>
+    <button class="big" id="createBtn">Crear mesa <small>(soy el Humano 1)</small></button>
+    <button class="big ghost" id="joinBtn">Unirme a una mesa</button>
+  </div>
+  <p id="lobbyMsg" style="color:#ffb300"></p>
+</div>
+
+<div id="game">
+<header>
+  <h1>🁫 <span id="youAre"></span> <small style="font-weight:normal" id="seatInfo"></small></h1>
+  <div class="score" id="score">—</div>
+</header>
+<div id="seats"></div>
+<div id="board-wrap"><div id="board"></div></div>
+<div id="msg"></div>
+<div id="log"></div>
+<div id="hand-wrap">
+  <div id="hand-label">Tu mano — toca una ficha resaltada para jugarla</div>
+  <div id="hand"></div>
+  <div id="side-pick">
+    <button id="sideL">◀ punta izquierda</button>
+    <button id="sideR">punta derecha ▶</button>
+    <button id="passBtn" class="ghost" style="display:none">Pasar</button>
+  </div>
+</div>
+</div>
+
+<div id="overlay"><div class="card">
+  <h2 id="ov-title"></h2><p id="ov-text"></p>
+  <button id="ov-btn">Siguiente mano</button>
+</div></div>
+
+<script>
+let S = null, seat = localStorage.getItem('domino_seat'), selected = null, pollTimer = null;
+
+async function post(path, body) {
+  const r = await fetch(path, {method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body || {})});
+  const j = await r.json();
+  if (j.error) throw new Error(j.error);
+  return j;
+}
+async function refresh() {
+  const r = await fetch('/api/state?seat=' + seat);
+  const j = await r.json();
+  if (!j.error) { S = j; render(); }
+}
+
+function tileHTML(a, b) {
+  return `<div class="tile"><div class="pips">${a}</div><div class="div"></div><div class="pips">${b}</div></div>`;
+}
+
+function render() {
+  document.getElementById('youAre').textContent = S.you_are;
+  const m = S.match;
+  document.getElementById('score').textContent = S.mode === 'teams'
+    ? `Tantos — Humanos: ${m[0]} · IAs: ${m[1]} (meta ${S.target})`
+    : `Tantos — ${Object.entries(S.seats).map(([s,n]) => n + ': ' + (m[s]||0)).join(' · ')} (meta ${S.target})`;
+  document.getElementById('seats').textContent =
+    'Sillas: ' + Object.entries(S.seats).map(([s,n]) => `S${+s+1}=${n}`).join(' · ');
+  document.getElementById('board').innerHTML =
+    S.board.length ? S.board.map(t => tileHTML(t[0], t[1])).join('')
+                   : '<span style="opacity:.6">Mesa vacía — esperando la salida…</span>';
+  document.getElementById('msg').textContent = S.done ? 'Mano terminada.' :
+    S.your_turn ? (S.must_pass ? 'No tienes jugada — te toca pasar.' : '¡Te toca! Elige una ficha resaltada.') :
+    `Turno de: ${S.turn_name}…`;
+  document.getElementById('log').innerHTML = S.log.map(l => `<div>• ${l}</div>`).join('');
+  const handEl = document.getElementById('hand');
+  handEl.innerHTML = '';
+  S.hand.forEach(h => {
+    const sides = S.legal.filter(l => l.tile === h.tile).map(l => l.side);
+    const d = document.createElement('div');
+    d.className = 'tile' + (sides.length && S.your_turn ? ' playable' : '')
+                         + (selected === h.tile ? ' selected' : '');
+    d.innerHTML = `<div class="pips">${h.a}</div><div class="div"></div><div class="pips">${h.b}</div>`;
+    if (sides.length && S.your_turn) d.onclick = () => pickTile(h.tile, sides);
+    handEl.appendChild(d);
+  });
+  const sp = document.getElementById('side-pick'), passBtn = document.getElementById('passBtn');
+  const bL = document.getElementById('sideL'), bR = document.getElementById('sideR');
+  if (S.your_turn && S.must_pass) {
+    sp.style.display = 'flex'; passBtn.style.display = '';
+    bL.style.display = 'none'; bR.style.display = 'none';
+  } else { passBtn.style.display = 'none'; if (!selected) sp.style.display = 'none'; }
+  const ov = document.getElementById('overlay');
+  if (S.done) {
+    document.getElementById('ov-title').textContent = S.match_over ? '🏁 Partido terminado' : 'Mano terminada';
+    document.getElementById('ov-text').textContent = (S.match_over ? S.match_over + ' ' : '') + S.log.slice(-1)[0];
+    document.getElementById('ov-btn').textContent = S.match_over ? 'Nuevo partido' : 'Siguiente mano';
+    ov.style.display = 'flex';
+  } else ov.style.display = 'none';
+}
+
+function pickTile(tile, sides) {
+  if (sides.length === 1) { play(tile, sides[0]); return; }
+  selected = tile;
+  document.getElementById('side-pick').style.display = 'flex';
+  const bL = document.getElementById('sideL'), bR = document.getElementById('sideR');
+  bL.style.display = ''; bR.style.display = '';
+  bL.onclick = () => play(tile, 0); bR.onclick = () => play(tile, 1);
+  render();
+}
+async function play(tile, side) {
+  selected = null;
+  document.getElementById('side-pick').style.display = 'none';
+  S = await post('/api/move', {seat: +seat, tile, side}); render();
+}
+async function pass() { S = await post('/api/move', {seat: +seat, pass: true}); render(); }
+
+document.getElementById('passBtn').onclick = pass;
+document.getElementById('createBtn').onclick = async () => {
+  try {
+    S = await post('/api/create', {mode: document.getElementById('mode').value,
+                                   opponent: document.getElementById('opponent').value});
+    seat = S.seat; localStorage.setItem('domino_seat', seat); enterGame();
+  } catch (e) { document.getElementById('lobbyMsg').textContent = e.message; }
+};
+document.getElementById('joinBtn').onclick = async () => {
+  try {
+    S = await post('/api/join', {});
+    seat = S.seat; localStorage.setItem('domino_seat', seat); enterGame();
+  } catch (e) { document.getElementById('lobbyMsg').textContent = e.message; }
+};
+document.getElementById('ov-btn').onclick = async () => {
+  S = S.match_over ? await post('/api/create', {mode: S.mode, opponent: S.opponent})
+                   : await post('/api/next', {seat: +seat});
+  if (S.seat !== undefined) { seat = S.seat; localStorage.setItem('domino_seat', seat); }
+  selected = null; render();
+};
+function enterGame() {
+  document.getElementById('lobby').style.display = 'none';
+  document.getElementById('game').style.display = 'flex';
+  render();
+  pollTimer = setInterval(refresh, 1500);
+}
+// show ppo option only if a trained model file exists
+(async () => {
+  try { const r = await fetch('/api/info'); const j = await r.json();
+    if (j.ppo_available) document.getElementById('ppoOpt').style.display = '';
+  } catch (e) {}
+  if (seat !== null) {
+    try { const r = await fetch('/api/state?seat=' + seat); const j = await r.json();
+      if (!j.error) { S = j; enterGame(); return; } } catch (e) {}
+    localStorage.removeItem('domino_seat'); seat = null;
+  }
+})();
+</script>
+</body>
+</html>

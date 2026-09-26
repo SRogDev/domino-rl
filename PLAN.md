@@ -243,13 +243,28 @@ Ideas ordenadas por impacto esperado. Ataca la que revele la Fase 6:
    la vía académica (más compleja; ojo: CFR vanilla es para 2 jugadores
    suma-cero — el 2v2 por equipos necesita extensiones).
 
-## Fase 9 — Jugar contra ella (1 semana, la diversión)
+## Fase 9 — Jugar contra ella (1 semana, la diversión) — prototipo ✅
 
-**Objetivo:** una web mínima donde retes a tu agente.
+**Objetivo:** una mesa digital donde humanos e IAs juegan juntos.
 
-Next.js + un endpoint Python que carga `final.zip` y responde jugadas.
-Nada de GPU en servidor: la red es tan pequeña que infiere en milisegundos en
-CPU. (Si quieres, esto puede ser tu proyecto #N del laboratorio.)
+Ya existe el prototipo en `demo/`: `server.py` (la mesa: motor real +
+bots + la red PPO) e `index.html` (cada jugador abre la página en su
+teléfono y ve solo su mano). Para probarlo hoy:
+
+```bash
+PYTHONPATH=src python demo/server.py   # en tu laptop
+# cada jugador abre http://<ip-de-la-laptop>:8000 en su telefono
+```
+
+- El Humano 1 crea la mesa (elige modo y rival); el Humano 2 se une.
+- En parejas 2v2 los humanos son pareja contra dos IAs; las sillas
+  vacías las ocupa la IA rival elegida (greedy = la más fuerte hoy,
+  random, o la PPO estudiante cuando exista `demo/models/ppo_smoke.zip`).
+- Partido a 100 tantos, la página refresca sola cada 1.5s.
+
+Lo que falta para producción: autenticación/salas múltiples (hoy una sola
+mesa por servidor), y cambiar `greedy` por `final.zip` cuando el
+entrenamiento real termine — es cambiar una línea.
 
 ## Fase 10 — Pareja de IAs vs pareja de humanos (la prueba de fuego) ⭐
 

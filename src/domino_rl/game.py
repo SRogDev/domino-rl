@@ -47,23 +47,30 @@ def pips(t: int) -> int:
     return a + b
 
 
-def new_round(seed: int | None = None, mode: str = "teams") -> "Round":
-    return Round(seed=seed, mode=mode)
+def new_round(seed: int | None = None, mode: str = "teams",
+            n_players: int = 4) -> "Round":
+    return Round(seed=seed, mode=mode, n_players=n_players)
 
 
 class Round:
     """One 'mano' of Cuban double-9 domino."""
 
-    def __init__(self, seed: int | None = None, mode: str = "teams"):
+    def __init__(self, seed: int | None = None, mode: str = "teams",
+                 n_players: int = 4):
         if mode not in ("teams", "individual"):
             raise ValueError(f"unknown mode {mode!r}")
+        if n_players not in (2, 4):
+            raise ValueError(f"n_players must be 2 or 4, got {n_players}")
+        if mode == "teams" and n_players != 4:
+            raise ValueError("teams mode needs 4 players")
         self.mode = mode
+        self.n_players = n_players
         rng = random.Random(seed)
         deck = list(range(N_TILES))
         rng.shuffle(deck)
         self.hands: list[list[int]] = [sorted(deck[i * HAND_SIZE:(i + 1) * HAND_SIZE])
-                                       for i in range(N_SEATS)]
-        self.pozo: list[int] = deck[N_SEATS * HAND_SIZE:]
+                                       for i in range(n_players)]
+        self.pozo: list[int] = deck[n_players * HAND_SIZE:]
 
         self.board: list[int] = []          # tile indices in placement order
         self.ends: tuple[int, int] | None = None
@@ -131,10 +138,10 @@ class Round:
             if legal:
                 raise ValueError("cannot pass while legal moves exist")
             self.passes_consecutive += 1
-            if self.passes_consecutive >= N_SEATS:
+            if self.passes_consecutive >= self.n_players:
                 self._finish_tranca()
             else:
-                self.turn = (self.turn + 1) % N_SEATS
+                self.turn = (self.turn + 1) % self.n_players
             return
 
         if move not in legal:
@@ -158,12 +165,12 @@ class Round:
         if not self.hands[seat]:
             self._finish_domino(seat)
         else:
-            self.turn = (self.turn + 1) % N_SEATS
+            self.turn = (self.turn + 1) % self.n_players
 
     # -------------------------------------------------------------- finishing
     def _finish_domino(self, seat: int) -> None:
         team = self.team_of(seat)
-        opponents = [s for s in range(N_SEATS) if self.team_of(s) != team]
+        opponents = [s for s in range(self.n_players) if self.team_of(s) != team]
         loser_pips = sum(self.hand_pips(s) for s in opponents)
         self.done = True
         self.winner_seat = seat
@@ -181,7 +188,7 @@ class Round:
             winner = 0 if t0 < t1 else 1
             loser_pips = t1 if winner == 0 else t0
         else:
-            seat_pips = [(self.hand_pips(s), s) for s in range(N_SEATS)]
+            seat_pips = [(self.hand_pips(s), s) for s in range(self.n_players)]
             seat_pips.sort()
             if seat_pips[0][0] == seat_pips[1][0]:
                 self.done = True  # draw

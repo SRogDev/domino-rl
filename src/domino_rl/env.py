@@ -9,14 +9,18 @@ Design for RL training (shared-policy self-play):
     multiplayer self-play.
   - Episode = one round ("mano"). `truncated` is only a safety cap.
 
-Observation (Box[98], float32), from the acting seat's perspective:
+Observation (Box[143], float32), from the acting seat's perspective —
+ONLY information that player legitimately knows (bitter lesson: no human
+heuristics, no hidden info):
   - hand one-hot ......................... 55
   - board ends L one-hot, R one-hot ...... 20
-  - pips of each value already played .... 10   (/11)
+  - played tiles one-hot ................. 55   (full public history —
+                                                 tile counting must be
+                                                 *learned*, never hardcoded)
   - tiles remaining per seat ............. 4    (/10)
   - consecutive passes ................... 1    (/4)
   - acting seat one-hot .................. 4
-  - teammate seat one-hot ................ 4    (zeros in individual mode)
+  - teammate seat one-hot ................ 4    (zeros outside 4p teams)
 
 Action (Discrete[111]): 55 tiles x {left, right} + pass (110).
 `action_masks()` returns the legal-move mask (for sb3-contrib MaskablePPO).
@@ -31,11 +35,11 @@ try:
 except ImportError:  # pragma: no cover
     gym, spaces = None, None
 
-from .game import N_TILES, TILES, Round, new_round
+from .game import N_TILES, TILES, Round, new_round, tile_index
 
 N_ACTIONS = N_TILES * 2 + 1
 PASS_ACTION = N_TILES * 2
-OBS_DIM = 98
+OBS_DIM = 143
 MAX_STEPS = 500
 
 
@@ -52,13 +56,15 @@ def _decode_action(action: int) -> tuple[int, int] | None:
 class DominoEnv(gym.Env if gym else object):
     metadata = {"render_modes": []}
 
-    def __init__(self, mode: str = "teams", reward_mode: str = "shaped",
-                 shaping_coef: float = 0.1, seed: int | None = None):
+    def __init__(self, mode: str = "teams", reward_mode: str = "sparse",
+                 shaping_coef: float = 0.1, n_players: int = 4,
+                 seed: int | None = None):
         if reward_mode not in ("sparse", "shaped"):
             raise ValueError("reward_mode must be 'sparse' or 'shaped'")
         self.mode = mode
         self.reward_mode = reward_mode
         self.shaping_coef = shaping_coef
+        self.n_players = n_players
         self._seed = seed
         self._rng = np.random.default_rng(seed)
         self.round: Round | None = None
@@ -88,7 +94,8 @@ class DominoEnv(gym.Env if gym else object):
         if seed is not None:
             self._rng = np.random.default_rng(seed)
         round_seed = int(self._rng.integers(0, 2**31 - 1))
-        self.round = new_round(seed=round_seed, mode=self.mode)
+        self.round = new_round(seed=round_seed, mode=self.mode,
+                               n_players=self.n_players)
         self._steps = 0
         self._update_mask()
         return self.observe(self.round.turn), {}
@@ -131,9 +138,10 @@ class DominoEnv(gym.Env if gym else object):
         if self.reward_mode == "sparse" or r.winner_team is None:
             return base
         # small dense nudge: leave fewer pips than the opponents
-        my_pips = sum(r.hand_pips(s) for s in range(4)
+        # (experimental only — default is sparse, bitter lesson)
+        my_pips = sum(r.hand_pips(s) for s in range(r.n_players)
                       if r.team_of(s) == my_team)
-        opp_pips = sum(r.hand_pips(s) for s in range(4)
+        opp_pips = sum(r.hand_pips(s) for s in range(r.n_players)
                        if r.team_of(s) != my_team)
         return base + self.shaping_coef * (opp_pips - my_pips) / 100.0
 
@@ -152,16 +160,17 @@ class DominoEnv(gym.Env if gym else object):
             obs[o + L] = 1.0
             obs[o + 10 + R] = 1.0
         o += 20
-        # pips of each value already played (10), /11
+        # played tiles one-hot (55): the full public history.
+        # Tile-counting / belief updates must EMERGE from this —
+        # never hardcoded (bitter lesson).
         for t in r.board:
             a, b = TILES[t]
-            obs[o + a] += 1.0
-            obs[o + b] += 1.0
-        obs[o:o + 10] /= 11.0
-        o += 10
+            obs[o + tile_index(a, b)] = 1.0
+        o += 55
         # tiles remaining per seat (4), /10
         for s in range(4):
-            obs[o + s] = len(r.hands[s]) / 10.0
+            obs[o + s] = (len(r.hands[s]) / 10.0
+                          if s < r.n_players else 0.0)
         o += 4
         # consecutive passes (1), /4
         obs[o] = r.passes_consecutive / 4.0

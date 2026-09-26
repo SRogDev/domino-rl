@@ -40,7 +40,8 @@ def make_vec_env(mode: str, reward_mode: str, shaping_coef: float,
                             shaping_coef=shaping_coef, n_players=n_players,
                             seed=seed + rank)
             env = Monitor(env)  # episode stats -> ep_rew_mean in logs
-            return ActionMasker(env, lambda e: e.action_masks())
+            # mask fn must unwrap Monitor to reach DominoEnv.action_masks()
+            return ActionMasker(env, lambda e: e.unwrapped.action_masks())
         return _init
 
     class MaskableDummyVecEnv(DummyVecEnv):

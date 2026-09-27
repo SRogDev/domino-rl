@@ -1,2 +1,29 @@
 resuming from checkpoints/mappo_1v1c/final.pt
 iter    1/1000  manos=256  mean_seat_rew=+0.181  hands_won={0: 123, 1: 131}  avg_tantos=36.2  pg=+0.0001 vf=0.2820 ent=0.510
+iter   20/1000  manos=256  mean_seat_rew=+0.181  hands_won={0: 115, 1: 139}  avg_tantos=36.2  pg=-0.0004 vf=0.2007 ent=0.536
+iter   40/1000  manos=256  mean_seat_rew=+0.182  hands_won={0: 116, 1: 133}  avg_tantos=36.4  pg=+0.0001 vf=0.2123 ent=0.543
+iter   60/1000  manos=256  mean_seat_rew=+0.182  hands_won={0: 127, 1: 124}  avg_tantos=36.3  pg=-0.0007 vf=0.2118 ent=0.538
+iter   80/1000  manos=256  mean_seat_rew=+0.185  hands_won={0: 123, 1: 128}  avg_tantos=36.9  pg=+0.0003 vf=0.2147 ent=0.554
+iter  100/1000  manos=256  mean_seat_rew=+0.185  hands_won={0: 133, 1: 116}  avg_tantos=37.0  pg=+0.0002 vf=0.2127 ent=0.534  | EVAL vs random 61.0% (draw 1.5%) vs greedy 46.0% (draw 2.0%)
+iter  120/1000  manos=256  mean_seat_rew=+0.186  hands_won={0: 118, 1: 136}  avg_tantos=37.3  pg=-0.0006 vf=0.2137 ent=0.548
+iter  140/1000  manos=256  mean_seat_rew=+0.188  hands_won={0: 113, 1: 138}  avg_tantos=37.7  pg=-0.0018 vf=0.2302 ent=0.545
+iter  160/1000  manos=256  mean_seat_rew=+0.193  hands_won={0: 128, 1: 126}  avg_tantos=38.5  pg=-0.0004 vf=0.2312 ent=0.545
+iter  180/1000  manos=256  mean_seat_rew=+0.195  hands_won={0: 124, 1: 131}  avg_tantos=38.9  pg=-0.0018 vf=0.2275 ent=0.541
+iter  200/1000  manos=256  mean_seat_rew=+0.186  hands_won={0: 136, 1: 115}  avg_tantos=37.2  pg=-0.0005 vf=0.2184 ent=0.547  | EVAL vs random 67.0% (draw 0.0%) vs greedy 49.0% (draw 1.0%)
+iter  220/1000  manos=256  mean_seat_rew=+0.187  hands_won={0: 129, 1: 123}  avg_tantos=37.3  pg=+0.0003 vf=0.2143 ent=0.550
+iter  240/1000  manos=256  mean_seat_rew=+0.181  hands_won={0: 121, 1: 131}  avg_tantos=36.3  pg=-0.0005 vf=0.2151 ent=0.544
+iter  260/1000  manos=256  mean_seat_rew=+0.196  hands_won={0: 120, 1: 130}  avg_tantos=39.1  pg=+0.0002 vf=0.2298 ent=0.538
+iter  280/1000  manos=256  mean_seat_rew=+0.174  hands_won={0: 131, 1: 124}  avg_tantos=34.7  pg=-0.0005 vf=0.1817 ent=0.539
+iter  300/1000  manos=256  mean_seat_rew=+0.194  hands_won={0: 128, 1: 127}  avg_tantos=38.7  pg=-0.0003 vf=0.2317 ent=0.549  | EVAL vs random 56.5% (draw 0.0%) vs greedy 44.0% (draw 3.5%)
+iter  320/1000  manos=256  mean_seat_rew=+0.182  hands_won={0: 117, 1: 134}  avg_tantos=36.4  pg=-0.0009 vf=0.2111 ent=0.552
+iter  340/1000  manos=256  mean_seat_rew=+0.192  hands_won={0: 123, 1: 130}  avg_tantos=38.4  pg=-0.0019 vf=0.2308 ent=0.545
+iter  360/1000  manos=256  mean_seat_rew=+0.202  hands_won={0: 129, 1: 127}  avg_tantos=40.4  pg=-0.0011 vf=0.2356 ent=0.554
+iter  380/1000  manos=256  mean_seat_rew=+0.185  hands_won={0: 127, 1: 125}  avg_tantos=37.0  pg=+0.0006 vf=0.2255 ent=0.553
+iter  400/1000  manos=256  mean_seat_rew=+0.191  hands_won={0: 120, 1: 132}  avg_tantos=38.2  pg=-0.0004 vf=0.2139 ent=0.536  | EVAL vs random 60.0% (draw 2.0%) vs greedy 55.0% (draw 2.0%)
+iter  420/1000  manos=256  mean_seat_rew=+0.183  hands_won={0: 136, 1: 115}  avg_tantos=36.6  pg=-0.0004 vf=0.2182 ent=0.533
+iter  440/1000  manos=256  mean_seat_rew=+0.177  hands_won={0: 128, 1: 126}  avg_tantos=35.4  pg=-0.0006 vf=0.2020 ent=0.547
+iter  460/1000  manos=256  mean_seat_rew=+0.195  hands_won={0: 135, 1: 118}  avg_tantos=39.0  pg=-0.0013 vf=0.2391 ent=0.543
+iter  480/1000  manos=256  mean_seat_rew=+0.183  hands_won={0: 123, 1: 130}  avg_tantos=36.6  pg=-0.0020 vf=0.2160 ent=0.533
+iter  500/1000  manos=256  mean_seat_rew=+0.181  hands_won={0: 125, 1: 129}  avg_tantos=36.2  pg=-0.0008 vf=0.2106 ent=0.542  | EVAL vs random 61.5% (draw 0.0%) vs greedy 50.5% (draw 2.0%)
+iter  520/1000  manos=256  mean_seat_rew=+0.195  hands_won={0: 125, 1: 129}  avg_tantos=39.0  pg=-0.0010 vf=0.2254 ent=0.541
+iter  540/1000  manos=256  mean_seat_rew=+0.185  hands_won={0: 140, 1: 114}  avg_tantos=37.1  pg=-0.0001 vf=0.2216 ent=0.542

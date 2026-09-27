@@ -359,14 +359,23 @@ def train(n_iters: int = 300, manos_per_iter: int = 64, mode: str = "teams",
         print("resuming from", resume)
         policy, opt_state, np_rng, torch_rng, last_it = \
             load_checkpoint(resume, device)
+        restored = []
         if opt_state is not None:
             opt.load_state_dict(opt_state)
+            restored.append("optimizer")
         if np_rng is not None:
             rng.bit_generator.state = np_rng
+            restored.append("numpy RNG")
         if torch_rng is not None:
             torch.set_rng_state(torch_rng.cpu())
+            restored.append("torch RNG")
         start_it = last_it + 1
-        print(f"  continued at iter {start_it} (full state restored)")
+        if restored:
+            print(f"  continued at iter {start_it} "
+                  f"({' + '.join(restored)} restored)")
+        else:
+            print(f"  warm start at iter 1 from policy weights only "
+                  f"(optimizer/RNG fresh)")
     if start_it > n_iters:
         print(f"nothing to do: checkpoint already at iter {start_it - 1} "
               f">= n_iters {n_iters}")

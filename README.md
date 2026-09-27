@@ -42,15 +42,17 @@ uv sync --group train && source .venv/bin/activate
 # 1. Ver que el simulador funciona: torneo greedy vs random
 PYTHONPATH=src python -m domino_rl.evaluate --rounds 200 --a greedy --b random
 
-# 2. Entrenar parejas 2v2 con MAPPO (CPU; en Colab gratis funciona igual)
-PYTHONPATH=src python -m domino_rl.mappo --iters 1000 --manos-per-iter 256 \
+# 2. Entrenar parejas 2v2 con IPPO (CPU; en Colab gratis funciona igual)
+#     (--iters = iteraciones TOTALES; LR y entropía decaen linealmente)
+PYTHONPATH=src python -m domino_rl.ippo --iters 1000 --manos-per-iter 256 \
   --mode teams --n-players 4 --match-target 100 \
-  --ent-coef 0.1 --epochs 2 --lr 1e-4 --seed 42 \
-  --out checkpoints/mappo_2v2 --ckpt-every 100 --eval-every 100 --eval-manos 200
+  --lr 1e-4 --lr-end 0.0 --ent-coef 0.1 --ent-end 0.01 \
+  --epochs 2 --seed 42 \
+  --out checkpoints/ippo_2v2 --ckpt-every 100 --eval-every 100 --eval-manos 200
 
 # 3. Medir al campeón contra el heurístico (500 manos, ±2%)
 PYTHONPATH=src python -m domino_rl.evaluate --rounds 500 \
-  --a mappo:checkpoints/mappo_2v2/ckpt_500.pt --b greedy \
+  --a ippo:checkpoints/mappo_2v2/ckpt_500.pt --b greedy \
   --mode teams --n-players 4
 
 # 4. Ver CÓMO juega, no solo cuánto gana (stats de estilo + transcripciones)
@@ -70,12 +72,15 @@ parámetros, no hace falta GPU.
 git clone https://github.com/SRogDev/domino-rl.git && cd domino-rl
 uv sync --group train && source .venv/bin/activate
 
-# retomar desde el checkpoint 500 (carga los pesos; el optimizador reinicia)
-PYTHONPATH=src python -m domino_rl.mappo --iters 500 --manos-per-iter 256 \
+# retomar desde el checkpoint 500: restaura pesos + optimizador + RNG + iter
+# (los checkpoints viejos de solo-pesos retoman "tibio": pesos sí, resto no).
+# --iters es el TOTAL: 520 = 20 iteraciones más desde el 500.
+PYTHONPATH=src python -m domino_rl.ippo --iters 520 --manos-per-iter 256 \
   --mode teams --n-players 4 --match-target 100 \
-  --ent-coef 0.1 --epochs 2 --lr 1e-4 --seed 43 \
+  --lr 1e-4 --lr-end 0.0 --ent-coef 0.1 --ent-end 0.01 \
+  --epochs 2 --seed 42 \
   --resume checkpoints/mappo_2v2/ckpt_500.pt \
-  --out checkpoints/mappo_2v2_cont --ckpt-every 100 --eval-every 100 --eval-manos 200
+  --out checkpoints/ippo_2v2_cont --ckpt-every 20 --eval-every 20 --eval-manos 200
 ```
 
 ## Reglas implementadas

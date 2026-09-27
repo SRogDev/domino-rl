@@ -1,8 +1,8 @@
-"""Tests for the MAPPO-style per-seat self-play (option B)."""
+"""Tests for the IPPO shared-parameter per-seat self-play (option B)."""
 import numpy as np
 import torch
 
-from domino_rl.mappo import (ActorCritic, compute_gae, load_policy,
+from domino_rl.ippo import (ActorCritic, compute_gae, load_policy,
                              play_manos, ppo_update, save_policy)
 
 
@@ -115,7 +115,7 @@ def test_save_load_roundtrip(tmp_path):
 
 
 def test_eval_vs_returns_sane_rates():
-    from domino_rl.mappo import eval_vs
+    from domino_rl.ippo import eval_vs
     p = _policy()
     wr, dr = eval_vs(p, "random", manos=20, mode="individual",
                      n_players=2, seed=0)
@@ -125,7 +125,7 @@ def test_eval_vs_returns_sane_rates():
 
 def test_analyze_stats_and_transcript():
     from domino_rl.analyze import behavior_stats, play_hand, act_str
-    from domino_rl.mappo import ActorCritic, save_policy
+    from domino_rl.ippo import ActorCritic, save_policy
     p = ActorCritic()
     save_policy(p, "/tmp/_tpol.pt")
     s = behavior_stats("/tmp/_tpol.pt", manos=6, opponent="random", seed=0)
@@ -136,3 +136,86 @@ def test_analyze_stats_and_transcript():
     assert len(lines) == len(moves) > 0
     assert res["winner_team"] in (0, 1, None)
     assert act_str(110) == "pasa"
+
+
+def test_lerp_schedule_endpoints():
+    from domino_rl.ippo import lerp
+    assert lerp(3e-4, 0.0, 0.0) == 3e-4
+    assert lerp(3e-4, 0.0, 1.0) == 0.0
+    assert lerp(0.1, 0.01, 0.5) == 0.055
+
+
+def test_ppo_update_reports_approx_kl():
+    torch.manual_seed(1)
+    p = ActorCritic()
+    n = 256
+    mask = torch.ones(n, 111, dtype=torch.bool)
+    batch = {
+        "obs": torch.randn(n, 143), "act": torch.randint(0, 111, (n,)),
+        "logp": torch.zeros(n), "mask": mask,
+        "adv": torch.randn(n), "ret": torch.randn(n),
+        "val": torch.randn(n),
+    }
+    opt = torch.optim.Adam(p.parameters(), lr=3e-4)
+    losses = ppo_update(p, opt, batch, epochs=1, minibatch=256)
+    assert "kl" in losses
+    assert np.isfinite(losses["kl"]) and losses["kl"] >= 0.0
+
+
+def test_full_checkpoint_roundtrip_restores_everything(tmp_path):
+    from domino_rl.ippo import load_checkpoint, save_checkpoint
+    torch.manual_seed(2)
+    p = _policy()
+    opt = torch.optim.Adam(p.parameters(), lr=1e-4)
+    # dirty the optimizer state with one step
+    p.zero_grad()
+    dummy = p.trunk(torch.randn(4, 143)).sum()
+    dummy.backward()
+    opt.step()
+    rng = np.random.default_rng(123)
+    rng.integers(0, 1000)  # advance the rng
+    state_before = rng.bit_generator.state
+    path = str(tmp_path / "ckpt.pt")
+    save_checkpoint(p, opt, rng, 42, path)
+
+    q, opt_state, np_rng, torch_rng, it = load_checkpoint(path)
+    assert it == 42
+    for a, b in zip(p.parameters(), q.parameters()):
+        assert torch.equal(a, b)
+    # optimizer state restorable into a fresh optimizer
+    q2 = ActorCritic()
+    q2.load_state_dict(q.state_dict())
+    opt2 = torch.optim.Adam(q2.parameters(), lr=9e-9)
+    opt2.load_state_dict(opt_state)
+    assert opt2.param_groups[0]["lr"] == 1e-4
+    # rng state identical -> same sequence continues
+    rng2 = np.random.default_rng(999)
+    rng2.bit_generator.state = np_rng
+    assert (rng.integers(0, 2 ** 31 - 1) ==
+            rng2.integers(0, 2 ** 31 - 1))
+    assert state_before["state"]["state"] == np_rng["state"]["state"]
+    assert torch_rng is not None
+
+
+def test_load_policy_reads_full_checkpoint(tmp_path):
+    from domino_rl.ippo import load_checkpoint, save_checkpoint
+    p = _policy()
+    opt = torch.optim.Adam(p.parameters())
+    rng = np.random.default_rng(0)
+    path = str(tmp_path / "full.pt")
+    save_checkpoint(p, opt, rng, 7, path)
+    q = load_policy(path)  # policy-only loader must handle full ckpts
+    for a, b in zip(p.parameters(), q.parameters()):
+        assert torch.equal(a, b)
+
+
+def test_evaluate_accepts_ippo_prefix(tmp_path):
+    from domino_rl.evaluate import load_policy as eval_load
+    from domino_rl.ippo import save_policy
+    p = _policy()
+    path = str(tmp_path / "pol.pt")
+    save_policy(p, path)
+    act = eval_load(f"ippo:{path}")
+    assert callable(act)
+    act_legacy = eval_load(f"mappo:{path}")  # deprecated alias still works
+    assert callable(act_legacy)

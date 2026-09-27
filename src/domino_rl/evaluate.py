@@ -18,7 +18,8 @@ from .env import DominoEnv
 
 
 def load_policy(spec: str):
-    """'greedy' / 'random', 'ppo:<sb3 .zip>' or 'mappo:<.pt>'."""
+    """'greedy' / 'random', 'ppo:<sb3 .zip>' or 'ippo:<.pt>'
+    ('mappo:' kept as a deprecated alias)."""
     if spec in AGENTS:
         agent = AGENTS[spec]()
         return agent.act
@@ -30,18 +31,19 @@ def load_policy(spec: str):
             action, _ = model.predict(obs, action_masks=mask, deterministic=True)
             return int(action)
         return ppo_act
-    if spec.startswith("mappo:"):
+    if spec.startswith("ippo:") or spec.startswith("mappo:"):
         import torch
-        from .mappo import load_policy as load_mappo
+        from .ippo import load_policy as load_ippo
 
-        policy = load_mappo(spec[len("mappo:"):])
-        def mappo_act(obs, mask):
+        path = spec.split(":", 1)[1]
+        policy = load_ippo(path)
+        def ippo_act(obs, mask):
             import numpy as np
             ot = torch.as_tensor(np.asarray(obs, dtype=np.float32)).unsqueeze(0)
             mt = torch.as_tensor(np.asarray(mask, dtype=bool)).unsqueeze(0)
             a, _, _ = policy.act(ot, mt, deterministic=True)
             return int(a.item())
-        return mappo_act
+        return ippo_act
     raise ValueError(f"unknown policy spec {spec!r}")
 
 

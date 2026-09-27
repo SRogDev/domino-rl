@@ -2,7 +2,7 @@
 
 Stats + human-readable hand transcripts for qualitative observation
 (cooperation signs, style, endgame). Usage:
-    python -m domino_rl.analyze --policy checkpoints/mappo_2v2/final.pt \
+    python -m domino_rl.analyze --policy checkpoints/ippo_2v2/final.pt \
         --manos 200 --opponent greedy --transcripts 2
 """
 from __future__ import annotations
@@ -13,7 +13,7 @@ import torch
 
 from .env import DominoEnv, PASS_ACTION
 from .game import TILES, pips
-from .mappo import load_policy
+from .ippo import load_policy
 from .baselines import AGENTS
 
 

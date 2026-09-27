@@ -1,0 +1,11 @@
+resuming from checkpoints/mappo_2v2/ckpt_500.pt
+  continued at iter 1 (full state restored)
+iter    1/520  manos=256  mean_seat_rew=+0.197  hands_won={0: 130, 1: 124}  avg_tantos=39.4  pg=+0.0009 vf=0.2335 ent=0.534 kl=-0.0000 lr=1e-04 entc=0.100
+iter    5/520  manos=256  mean_seat_rew=+0.183  hands_won={0: 133, 1: 119}  avg_tantos=36.6  pg=+0.0009 vf=0.2072 ent=0.538 kl=-0.0000 lr=1e-04 entc=0.099
+iter   10/520  manos=256  mean_seat_rew=+0.187  hands_won={0: 124, 1: 131}  avg_tantos=37.4  pg=-0.0006 vf=0.2258 ent=0.540 kl=-0.0000 lr=1e-04 entc=0.098
+iter   15/520  manos=256  mean_seat_rew=+0.188  hands_won={0: 125, 1: 128}  avg_tantos=37.6  pg=-0.0003 vf=0.2199 ent=0.539 kl=-0.0000 lr=1e-04 entc=0.097
+iter   20/520  manos=256  mean_seat_rew=+0.185  hands_won={0: 123, 1: 127}  avg_tantos=37.1  pg=-0.0002 vf=0.2131 ent=0.546 kl=-0.0000 lr=1e-04 entc=0.097  | EVAL vs random 55.0% (draw 0.0%) vs greedy 48.0% (draw 0.5%)
+iter   25/520  manos=256  mean_seat_rew=+0.179  hands_won={0: 126, 1: 127}  avg_tantos=35.7  pg=-0.0001 vf=0.2047 ent=0.527 kl=-0.0000 lr=1e-04 entc=0.096
+iter   30/520  manos=256  mean_seat_rew=+0.187  hands_won={0: 130, 1: 123}  avg_tantos=37.4  pg=-0.0001 vf=0.2264 ent=0.546 kl=-0.0000 lr=9e-05 entc=0.095
+iter   35/520  manos=256  mean_seat_rew=+0.190  hands_won={0: 134, 1: 119}  avg_tantos=38.1  pg=-0.0005 vf=0.2142 ent=0.532 kl=-0.0000 lr=9e-05 entc=0.094
+iter   40/520  manos=256  mean_seat_rew=+0.188  hands_won={0: 131, 1: 125}  avg_tantos=37.7  pg=-0.0004 vf=0.2195 ent=0.540 kl=-0.0000 lr=9e-05 entc=0.093  | EVAL vs random 57.0% (draw 2.5%) vs greedy 51.0% (draw 2.0%)

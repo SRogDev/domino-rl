@@ -219,3 +219,13 @@ def test_evaluate_accepts_ippo_prefix(tmp_path):
     assert callable(act)
     act_legacy = eval_load(f"mappo:{path}")  # deprecated alias still works
     assert callable(act_legacy)
+
+
+def test_load_checkpoint_from_policy_only_ckpt_is_warm(tmp_path):
+    from domino_rl.ippo import load_checkpoint, save_policy
+    p = _policy()
+    path = str(tmp_path / "old.pt")
+    save_policy(p, path)  # legacy: weights only, no opt/RNG/iter
+    _, opt_state, np_rng, torch_rng, it = load_checkpoint(path)
+    assert opt_state is None and np_rng is None and torch_rng is None
+    assert it == 0  # -> train() warm-starts at iter 1, fresh opt/RNG

@@ -37,17 +37,45 @@ PLAN.md         El plan paso a paso completo (Fases 0–8)
 ## Uso rápido
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[train]"
+uv sync --group train && source .venv/bin/activate
 
 # 1. Ver que el simulador funciona: torneo greedy vs random
-python -m domino_rl.evaluate --rounds 200 --a greedy --b random
+PYTHONPATH=src python -m domino_rl.evaluate --rounds 200 --a greedy --b random
 
-# 2. Entrenar (CPU; en Colab gratis funciona igual)
-python -m domino_rl.train --timesteps 2000000 --n-envs 8 --out checkpoints
+# 2. Entrenar parejas 2v2 con MAPPO (CPU; en Colab gratis funciona igual)
+PYTHONPATH=src python -m domino_rl.mappo --iters 1000 --manos-per-iter 256 \
+  --mode teams --n-players 4 --match-target 100 \
+  --ent-coef 0.1 --epochs 2 --lr 1e-4 --seed 42 \
+  --out checkpoints/mappo_2v2 --ckpt-every 100 --eval-every 100 --eval-manos 200
 
-# 3. Medir al campeón contra el heurístico
-python -m domino_rl.evaluate --a ppo:checkpoints/final.zip --b greedy --rounds 500
+# 3. Medir al campeón contra el heurístico (500 manos, ±2%)
+PYTHONPATH=src python -m domino_rl.evaluate --rounds 500 \
+  --a mappo:checkpoints/mappo_2v2/ckpt_500.pt --b greedy \
+  --mode teams --n-players 4
+
+# 4. Ver CÓMO juega, no solo cuánto gana (stats de estilo + transcripciones)
+PYTHONPATH=src python -m domino_rl.analyze \
+  --policy checkpoints/mappo_2v2/ckpt_500.pt \
+  --manos 200 --opponent greedy --transcripts 3
+```
+
+## Continuar un entrenamiento en otra máquina
+
+Todo lo necesario está en el repo: código, `pyproject.toml` + `uv.lock`
+(dependencias) y el checkpoint `checkpoints/mappo_2v2/ckpt_500.pt`
+(53.8% vs pareja greedy, 59.8% vs random). Solo CPU — la red tiene ~35k
+parámetros, no hace falta GPU.
+
+```bash
+git clone https://github.com/SRogDev/domino-rl.git && cd domino-rl
+uv sync --group train && source .venv/bin/activate
+
+# retomar desde el checkpoint 500 (carga los pesos; el optimizador reinicia)
+PYTHONPATH=src python -m domino_rl.mappo --iters 500 --manos-per-iter 256 \
+  --mode teams --n-players 4 --match-target 100 \
+  --ent-coef 0.1 --epochs 2 --lr 1e-4 --seed 43 \
+  --resume checkpoints/mappo_2v2/ckpt_500.pt \
+  --out checkpoints/mappo_2v2_cont --ckpt-every 100 --eval-every 100 --eval-manos 200
 ```
 
 ## Reglas implementadas

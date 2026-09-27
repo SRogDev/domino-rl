@@ -121,3 +121,18 @@ def test_eval_vs_returns_sane_rates():
                      n_players=2, seed=0)
     assert 0.0 <= wr <= 1.0 and 0.0 <= dr <= 1.0
     assert wr + dr <= 1.0
+
+
+def test_analyze_stats_and_transcript():
+    from domino_rl.analyze import behavior_stats, play_hand, act_str
+    from domino_rl.mappo import ActorCritic, save_policy
+    p = ActorCritic()
+    save_policy(p, "/tmp/_tpol.pt")
+    s = behavior_stats("/tmp/_tpol.pt", manos=6, opponent="random", seed=0)
+    assert s["hands"] == 6
+    assert 0.0 <= s["team_hands_won"] / 6 <= 1.0
+    assert s["turns"] > 0
+    lines, moves, res = play_hand(p, (0, 2), "random", seed=1, device="cpu")
+    assert len(lines) == len(moves) > 0
+    assert res["winner_team"] in (0, 1, None)
+    assert act_str(110) == "pasa"

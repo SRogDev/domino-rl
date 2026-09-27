@@ -1,0 +1,2 @@
+resuming from checkpoints/mappo_1v1c/final.pt
+iter    1/1000  manos=256  mean_seat_rew=+0.181  hands_won={0: 123, 1: 131}  avg_tantos=36.2  pg=+0.0001 vf=0.2820 ent=0.510
